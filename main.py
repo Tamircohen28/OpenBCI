@@ -18,7 +18,7 @@ def bandpass_filter(data, lowcut, highcut, fs, order=5):
 
 def update_plot(frame):
     global eeg_data
-    data = board.get_current_board_data(SAMPLES_NUM)[0:5]  # Get latest EEG data
+    data = board.get_current_board_data(SAMPLES_NUM)[2]  # Get latest EEG data
     if data.shape[1] < SAMPLES_NUM:
         # If fewer samples are returned, fill the rest with zeros
         padded_data = np.zeros((5, SAMPLES_NUM))
