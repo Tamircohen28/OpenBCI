@@ -49,7 +49,9 @@ def update(frame):
 
     for wave in BANDS:
         # Filter wave frequencies data
-        wave_data = clean.copy().filter(wave.freq_low, wave.freq_high).get_data()[0] * BARINFLOW_VOLT_RATION
+        wave_data = clean.copy().compute_psd(fmin=wave.freq_low, fmax=wave.freq_high).get_data()[0]
+        print(wave_data)
+        # wave_data = clean.copy().filter(wave.freq_low, wave.freq_high).get_data()[0] * BARINFLOW_VOLT_RATION
 
         # Ensure wave_data have the same length as times
         if len(wave_data) < len(times):

@@ -19,7 +19,7 @@ BANDS = [
 
 # Define parameters for real-time plot
 # Number of data points to display
-WINDOW_SIZE = 500
+WINDOW_SIZE = 1500
 # Refresh rate in milliseconds
 REFRESH_RATE = 10
 SAVE_COUNT = 200
