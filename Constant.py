@@ -13,13 +13,13 @@ SAMPLES_NUM = 50
 # Frequency bands
 BANDS = [
     Band('Alpha', 8, 12, 20, 200),
-    Band('Beta', 13, 30, 5, 30),
-    Band('Gamma', 15, 50, 10, 200)
+    Band('Beta', 13, 30, 5, 30)
+    # Band('Gamma', 15, 50, 10, 200)
 ]
 
 # Define parameters for real-time plot
 # Number of data points to display
-WINDOW_SIZE = 1321
+WINDOW_SIZE = 500
 # Refresh rate in milliseconds
 REFRESH_RATE = 10
 SAVE_COUNT = 200
@@ -38,3 +38,7 @@ BARINFLOW_VOLT_RATION = 1e6
 
 FIG_WIDTH = 12
 FIG_HEIGHT = 6
+
+
+OUTPUT_DIR = "Outputs"
+STATS_FILE = "statistics.json"

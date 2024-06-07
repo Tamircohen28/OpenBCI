@@ -1,12 +1,36 @@
+import os
+from datetime import datetime
+
 import matplotlib.pyplot as plt
+import pandas as pd
 from matplotlib.animation import FuncAnimation
-from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
+from brainflow.board_shim import BoardShim, BrainFlowInputParams
 from mne import create_info
 from mne.io import RawArray
 import numpy as np
+from mne.utils import set_log_level
+
 from Constant import *
 
-RECORDED_DATA = []
+RECORDED_DATA = {wave.name: [] for wave in BANDS}
+
+# Disable logging from MNE
+set_log_level('WARNING')
+
+
+def save_recording():
+    # Create output directory if it doesn't exist
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+
+    # Generate a timestamped filename
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    output_file = os.path.join(OUTPUT_DIR, f'eeg_data_{timestamp}.csv')
+
+    # Convert all collected data to a DataFrame and write to a CSV file
+    df = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in RECORDED_DATA.items()]))
+    df.to_csv(output_file, index=False)
+    print(f"Data has been saved to {output_file}")
 
 
 def update(frame):
@@ -35,6 +59,8 @@ def update(frame):
 
         # Update lines
         waves_lines_dict[wave.name].set_ydata(wave_data)
+        # Save data for recording
+        RECORDED_DATA[wave.name].extend(wave_data.tolist())
 
     return waves_lines_dict.values()
 
@@ -45,6 +71,7 @@ if __name__ == '__main__':
     params.serial_port = SERIAL_PORT
     board = BoardShim(BOARD_ID, params)
 
+    # TODO: add board mac and retry of connect (catch exception), timeout
     # Prepare session
     board.prepare_session()
 
@@ -61,8 +88,9 @@ if __name__ == '__main__':
     info = create_info(ch_names=ch_names, sfreq=board.get_sampling_rate(board.get_board_id()), ch_types=ch_types)
 
     # Set up the figure and axes
-    fig, axs = plt.subplots(len(BANDS), 1, figsize=(FIG_WIDTH, FIG_WIDTH))
+    fig, axs = plt.subplots(len(BANDS), 1, figsize=(FIG_WIDTH, FIG_HEIGHT))
     waves_lines_dict = {}
+
     for (i, wave) in enumerate(BANDS):
         wave_ax = axs[i]
         wave_line, = wave_ax.plot(times, eeg_data, label=f'{wave.name} ({wave.freq_low}-{wave.freq_high} Hz)')
@@ -72,18 +100,18 @@ if __name__ == '__main__':
         wave_ax.set_xlabel('Time (s)')
         wave_ax.set_ylabel('Amplitude (V)')
         wave_ax.legend(loc='upper right')
-        wave_ax.axhline(y=0, color='b', linestyle='--', linewidth=1)  # Horizontal line x = 0
-        wave_ax.axhline(y=wave.ampl_low, color='r', linestyle='--', linewidth=0.5)  # Horizontal line at 20 µV
-        wave_ax.axhline(y=wave.ampl_high, color='r', linestyle='--', linewidth=0.5)  # Horizontal line at 200 µV
-        wave_ax.axhspan(wave.ampl_low, wave.ampl_high, color='green',
-                        alpha=0.3)  # Horizontal span with background color
+        wave_ax.axhline(y=0, color='b', linestyle='--', linewidth=1)  # Horizontal line at x = 0
+        wave_ax.axhline(y=wave.ampl_low, color='r', linestyle='--', linewidth=0.5)  # Horizontal line at low amplitude
+        wave_ax.axhline(y=wave.ampl_high, color='r', linestyle='--',
+                        linewidth=0.5)  # Horizontal line at high amplitude
+        wave_ax.axhspan(wave.ampl_low, wave.ampl_high, color='green', alpha=0.3)  # Mark wanted values area
         wave_ax.set_yticks(
             [0] + [-wave.ampl_low, wave.ampl_low, wave.ampl_high, int(1.5 * wave.ampl_high)])  # Add y-axis ticks
 
     plt.tight_layout()
 
     # Create animation
-    ani = FuncAnimation(fig, update, interval=REFRESH_RATE, blit=True, save_count=200)
+    ani = FuncAnimation(fig, update, interval=REFRESH_RATE, blit=True, save_count=SAVE_COUNT)
 
     # Show the plot
     plt.show()
@@ -91,3 +119,5 @@ if __name__ == '__main__':
     # Stop the stream and release the session when done
     board.stop_stream()
     board.release_session()
+
+    save_recording()
