@@ -4,6 +4,6 @@ class Band:
         # Frequency (Hz)
         self.freq_low = freq_low
         self.freq_high = freq_high
-        # Amplitude µV
+        # Amplitude (µV)
         self.ampl_low = ampl_low
         self.ampl_high = ampl_high

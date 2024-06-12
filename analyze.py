@@ -1,13 +1,22 @@
 import json
+from typing import List
 
 import pandas as pd
 import os
-from Constant import BANDS, OUTPUT_DIR, STATS_FILE  # Make sure to import BANDS correctly
+
+from Common.band import Band
+from Common.constant import BANDS, OUTPUT_DIR, STATS_FILE
 
 
-def calculate_wave_statistics(csv_file, bands):
+def calculate_wave_statistics(stats_csv_file: str, bands: List[Band]):
+    """
+    Calculate the Mean and STD of every wave from existing data points file.
+    :param stats_csv_file: path to data file (.csv format)
+    :param bands: list of bands to perform calculation at
+    :return: {band.name: (mean, std)}
+    """
     # Load the CSV file
-    df = pd.read_csv(csv_file)
+    df = pd.read_csv(stats_csv_file)
 
     statistics = {}
     for wave in bands:
@@ -22,7 +31,7 @@ def calculate_wave_statistics(csv_file, bands):
 
 
 if __name__ == '__main__':
-    print("Locating DB")
+    print("Locating DB...")
     # Define the directory and get the latest CSV file
     csv_files = [f for f in os.listdir(OUTPUT_DIR) if f.endswith('.csv')]
     latest_file = sorted(csv_files)[-1]

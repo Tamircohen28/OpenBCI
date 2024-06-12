@@ -1,8 +1,6 @@
-import os
-from datetime import datetime
+import json
 
 import matplotlib.pyplot as plt
-import pandas as pd
 from matplotlib.animation import FuncAnimation
 from brainflow.board_shim import BoardShim, BrainFlowInputParams
 from mne import create_info
@@ -10,64 +8,74 @@ from mne.io import RawArray
 import numpy as np
 from mne.utils import set_log_level
 
-from Constant import *
+from Common.constant import *
 
-RECORDED_DATA = {wave.name: [] for wave in BANDS}
+STATS = {wave.name: () for wave in BANDS}
+ERROR_LINE = {wave.name: 0 for wave in BANDS}
+ERROR_STATUS = {wave.name: False for wave in BANDS}
 
 # Disable logging from MNE
 set_log_level('WARNING')
 
 
-def save_recording():
-    # Create output directory if it doesn't exist
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
-
-    # Generate a timestamped filename
-    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    output_file = os.path.join(OUTPUT_DIR, f'eeg_data_{timestamp}.csv')
-
-    # Convert all collected data to a DataFrame and write to a CSV file
-    df = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in RECORDED_DATA.items()]))
-    df.to_csv(output_file, index=False)
-    print(f"Data has been saved to {output_file}")
-
-
 def update(frame):
     global eeg_data
     data = board.get_current_board_data(WINDOW_SIZE)
-    # eeg_data = data[OPENBCI_PINS, :] / 1e6
-
-    # data = board.get_board_data()
-    # Convert to volts and take the last window_size samples
     eeg_data = data[OPENBCI_PINS, :] / BARINFLOW_VOLT_RATION
 
-    # Create RawArray and apply filters
     raw = RawArray(eeg_data, info)
     raw_notch = raw.copy().notch_filter(NOTCH_FILTER)
     clean = raw_notch.copy().filter(LOW_FILTER_LEVEL, HIGH_FILTER_LEVEL)
 
     for wave in BANDS:
-        # Filter wave frequencies data
-        wave_data = clean.copy().compute_psd(fmin=wave.freq_low, fmax=wave.freq_high).get_data()[0]
-        print(wave_data)
-        # wave_data = clean.copy().filter(wave.freq_low, wave.freq_high).get_data()[0] * BARINFLOW_VOLT_RATION
+        wave_data = clean.copy().filter(wave.freq_low, wave.freq_high).get_data()[0] * BARINFLOW_VOLT_RATION
 
-        # Ensure wave_data have the same length as times
         if len(wave_data) < len(times):
             wave_data = np.pad(wave_data, (len(times) - len(wave_data), 0), 'constant')
         else:
             wave_data = wave_data[-len(times):]
 
-        # Update lines
         waves_lines_dict[wave.name].set_ydata(wave_data)
-        # Save data for recording
-        RECORDED_DATA[wave.name].extend(wave_data.tolist())
+
+        mean = np.mean(wave_data)
+        error_line = ERROR_LINE[wave.name]
+
+        in_error = False
+        if wave.name == "Alpha":
+            if mean < error_line:
+                print("Alpha", error_line, mean)
+                in_error = True
+        else:
+            if mean > error_line:
+                print("Beta", error_line, mean)
+                in_error = True
+
+        ERROR_STATUS[wave.name] = in_error
+
+    if any(ERROR_STATUS.values()):
+        print(f"User is not feeling as normal!: {ERROR_STATUS}")
 
     return waves_lines_dict.values()
 
 
+def load_statistics(statistics_file):
+    with open(statistics_file, 'r') as f:
+        global STATS
+        STATS = json.load(f)
+
+    for wave in BANDS:
+        mean = STATS[wave.name][0]
+        std = STATS[wave.name][1]
+        if wave.name == "Alpha":
+            ERROR_LINE[wave.name] = mean - 2 * std
+        else:
+            ERROR_LINE[wave.name] = mean + 2 * std
+
+
 if __name__ == '__main__':
+    # Load statistics from the JSON file
+    load_statistics(STATS_FILE)
+
     # Initialize BrainFlow and set parameters
     params = BrainFlowInputParams()
     params.serial_port = SERIAL_PORT
@@ -97,6 +105,7 @@ if __name__ == '__main__':
         wave_ax = axs[i]
         wave_line, = wave_ax.plot(times, eeg_data, label=f'{wave.name} ({wave.freq_low}-{wave.freq_high} Hz)')
         waves_lines_dict[wave.name] = wave_line
+        error_line = ERROR_LINE[wave.name]
 
         wave_ax.set_title(f'{wave.name} Waves')
         wave_ax.set_xlabel('Time (s)')
@@ -106,9 +115,12 @@ if __name__ == '__main__':
         wave_ax.axhline(y=wave.ampl_low, color='r', linestyle='--', linewidth=0.5)  # Horizontal line at low amplitude
         wave_ax.axhline(y=wave.ampl_high, color='r', linestyle='--',
                         linewidth=0.5)  # Horizontal line at high amplitude
+        wave_ax.axhline(y=error_line, color='r', linestyle='--',
+                        linewidth=1.5)  # Error Line
         wave_ax.axhspan(wave.ampl_low, wave.ampl_high, color='green', alpha=0.3)  # Mark wanted values area
         wave_ax.set_yticks(
-            [0] + [-wave.ampl_low, wave.ampl_low, wave.ampl_high, int(1.5 * wave.ampl_high)])  # Add y-axis ticks
+            [0] + [-wave.ampl_low, error_line, wave.ampl_low, wave.ampl_high,
+                   int(1.5 * wave.ampl_high)])  # Add y-axis ticks
 
     plt.tight_layout()
 
@@ -121,5 +133,3 @@ if __name__ == '__main__':
     # Stop the stream and release the session when done
     board.stop_stream()
     board.release_session()
-
-    save_recording()
